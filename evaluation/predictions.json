@@ -6,5 +6,197 @@
     {
         "id": 2,
         "predicted_tool": "get_repository"
+    },
+    {
+        "id": 3,
+        "predicted_tool": "get_repository"
+    },
+    {
+        "id": 4,
+        "predicted_tool": "search_repositories"
+    },
+    {
+        "id": 5,
+        "predicted_tool": "search_repositories"
+    },
+    {
+        "id": 6,
+        "predicted_tool": "get_file_contents"
+    },
+    {
+        "id": 7,
+        "predicted_tool": "get_file_contents"
+    },
+    {
+        "id": 8,
+        "predicted_tool": "get_file_contents"
+    },
+    {
+        "id": 9,
+        "predicted_tool": "list_directory"
+    },
+    {
+        "id": 10,
+        "predicted_tool": "list_directory"
+    },
+    {
+        "id": 11,
+        "predicted_tool": "list_issues"
+    },
+    {
+        "id": 12,
+        "predicted_tool": "list_issues"
+    },
+    {
+        "id": 13,
+        "predicted_tool": "get_issue"
+    },
+    {
+        "id": 14,
+        "predicted_tool": "get_issue"
+    },
+    {
+        "id": 15,
+        "predicted_tool": "create_issue"
+    },
+    {
+        "id": 16,
+        "predicted_tool": "create_issue"
+    },
+    {
+        "id": 17,
+        "predicted_tool": "create_issue"
+    },
+    {
+        "id": 18,
+        "predicted_tool": "list_issues"
+    },
+    {
+        "id": 19,
+        "predicted_tool": "list_pull_requests"
+    },
+    {
+        "id": 20,
+        "predicted_tool": "list_pull_requests"
+    },
+    {
+        "id": 21,
+        "predicted_tool": "get_pull_request"
+    },
+    {
+        "id": 22,
+        "predicted_tool": "get_pull_request"
+    },
+    {
+        "id": 23,
+        "predicted_tool": "create_pull_request"
+    },
+    {
+        "id": 24,
+        "predicted_tool": "create_pull_request"
+    },
+    {
+        "id": 25,
+        "predicted_tool": "create_pull_request"
+    },
+    {
+        "id": 26,
+        "predicted_tool": "list_branches"
+    },
+    {
+        "id": 27,
+        "predicted_tool": "list_branches"
+    },
+    {
+        "id": 28,
+        "predicted_tool": "get_branch"
+    },
+    {
+        "id": 29,
+        "predicted_tool": "get_commit"
+    },
+    {
+        "id": 30,
+        "predicted_tool": "create_branch"
+    },
+    {
+        "id": 31,
+        "predicted_tool": "list_commits"
+    },
+    {
+        "id": 32,
+        "predicted_tool": "list_commits"
+    },
+    {
+        "id": 33,
+        "predicted_tool": "get_commit"
+    },
+    {
+        "id": 34,
+        "predicted_tool": "get_commit"
+    },
+    {
+        "id": 35,
+        "predicted_tool": "list_commits"
+    },
+    {
+        "id": 36,
+        "predicted_tool": "search_code"
+    },
+    {
+        "id": 37,
+        "predicted_tool": "search_code"
+    },
+    {
+        "id": 38,
+        "predicted_tool": "search_issues"
+    },
+    {
+        "id": 39,
+        "predicted_tool": "list_issues"
+    },
+    {
+        "id": 40,
+        "predicted_tool": "search_pull_requests"
+    },
+    {
+        "id": 41,
+        "predicted_tool": "search_pull_requests"
+    },
+    {
+        "id": 42,
+        "predicted_tool": "list_labels"
+    },
+    {
+        "id": 43,
+        "predicted_tool": "list_labels"
+    },
+    {
+        "id": 44,
+        "predicted_tool": "add_labels_to_issue"
+    },
+    {
+        "id": 45,
+        "predicted_tool": "create_or_update_file"
+    },
+    {
+        "id": 46,
+        "predicted_tool": "create_or_update_file"
+    },
+    {
+        "id": 47,
+        "predicted_tool": "create_or_update_file"
+    },
+    {
+        "id": 48,
+        "predicted_tool": "create_or_update_file"
+    },
+    {
+        "id": 49,
+        "predicted_tool": "create_branch"
+    },
+    {
+        "id": 50,
+        "predicted_tool": "create_pull_request"
     }
 ]
