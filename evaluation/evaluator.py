@@ -16,7 +16,9 @@ load_dotenv()
 
 PREDICTIONS_FILE = Path(__file__).parent / "predictions.json"
 
-MODEL = "llama-3.1-8b-instant"
+MODEL = "openai/gpt-oss-20b"
+
+DEFAULT_MIN_ACCURACY = 90.0
 
 
 # ============================================================
@@ -160,13 +162,25 @@ Do not return explanations.
 # Evaluation
 # ============================================================
 
-async def run_evaluation():
+async def run_evaluation() -> bool:
 
     api_key = os.getenv("GROQ_API_KEY")
 
     if not api_key:
         raise RuntimeError(
             "GROQ_API_KEY is not configured."
+        )
+
+    min_accuracy = float(
+        os.getenv(
+            "EVALUATION_MIN_ACCURACY",
+            str(DEFAULT_MIN_ACCURACY),
+        )
+    )
+
+    if not 0 <= min_accuracy <= 100:
+        raise ValueError(
+            "EVALUATION_MIN_ACCURACY must be between 0 and 100."
         )
 
     groq = Groq(api_key=api_key)
@@ -287,58 +301,44 @@ async def run_evaluation():
             + wrong
             + failed
         )
-
-        accuracy = (
-            (correct / evaluated) * 100
-            if evaluated
-            else 0
-        )
-
+        
         # --------------------------------------------
         # Summary
         # --------------------------------------------
 
+        accuracy = (
+            (correct / len(TEST_CASES)) * 100
+            if TEST_CASES
+            else 0
+        )
+
         print("\n")
-
         print("=" * 60)
-        print(
-            "Evaluation Complete"
-        )
+        print("Evaluation Complete")
         print("=" * 60)
 
-        print(
-            f"Total test cases : {len(TEST_CASES)}"
+        print(f"Total test cases : {len(TEST_CASES)}")
+        print(f"Evaluated        : {evaluated}")
+        print(f"Correct          : {correct}")
+        print(f"Wrong Tool       : {wrong}")
+        print(f"Tool Failed      : {failed}")
+        print(f"Accuracy         : {accuracy:.2f}%")
+        print(f"Minimum accuracy : {min_accuracy:.2f}%")
+
+        print(f"\nPredictions saved to:\n{PREDICTIONS_FILE}")
+
+        passed = (
+            evaluated == len(TEST_CASES)
+            and accuracy >= min_accuracy
         )
 
-        print(
-            f"Evaluated        : {evaluated}"
-        )
+        if passed:
+            print("RESULT: PASS")
+        else:
+            print("RESULT: FAIL - evaluation incomplete or accuracy below threshold")
 
-        print(
-            f"Correct          : {correct}"
-        )
+        return passed
 
-        print(
-            f"Wrong Tool       : {wrong}"
-        )
-
-        print(
-            f"Tool Failed      : {failed}"
-        )
-
-        print(
-            f"Accuracy         : {accuracy:.2f}%"
-        )
-
-        print("=" * 60)
-
-        print(
-            f"\nPredictions saved to:"
-        )
-
-        print(
-            PREDICTIONS_FILE
-        )
 
     finally:
 
@@ -350,20 +350,14 @@ async def run_evaluation():
 # ============================================================
 
 def main():
-
     try:
-
-        asyncio.run(
-            run_evaluation()
-        )
-
+        passed = asyncio.run(run_evaluation())
+        raise SystemExit(0 if passed else 1)
     except KeyboardInterrupt:
-
-        print(
-            "\nEvaluation stopped."
-        )
+        print("\nEvaluation stopped.")
+        raise SystemExit(130)
 
 
 if __name__ == "__main__":
-
     main()
+

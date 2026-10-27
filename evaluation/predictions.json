@@ -113,7 +113,7 @@
     },
     {
         "id": 29,
-        "predicted_tool": "get_commit"
+        "predicted_tool": "get_branch"
     },
     {
         "id": 30,
@@ -153,7 +153,7 @@
     },
     {
         "id": 39,
-        "predicted_tool": "list_issues"
+        "predicted_tool": "search_issues"
     },
     {
         "id": 40,
@@ -177,7 +177,7 @@
     },
     {
         "id": 45,
-        "predicted_tool": "create_or_update_file"
+        "predicted_tool": "add_labels_to_issue"
     },
     {
         "id": 46,
