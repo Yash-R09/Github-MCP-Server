@@ -1,90 +1,88 @@
+
+import os
 from contextlib import AsyncExitStack
 from typing import Any
 
-from mcp import ClientSession, StdioServerParameters
+from mcp import Client, ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 
 class GitHubMCPClient:
     """
-    MCP client responsible for connecting to the GitHub MCP server,
-    discovering its tools, and invoking them.
+    MCP client supporting both stdio and Streamable HTTP.
     """
 
     def __init__(self):
-        self.session: ClientSession | None = None
+        self.session: Any | None = None
         self.exit_stack = AsyncExitStack()
 
     async def connect(self):
         """
-        Start the GitHub MCP server as a subprocess and establish
-        an MCP client session.
+        Connect over HTTP if MCP_SERVER_URL is set.
+        Otherwise, start the local server using stdio.
         """
 
-        server_params = StdioServerParameters(
-            command="python",
-            args=["-m", "app.server"],
-        )
+        server_url = os.getenv("MCP_SERVER_URL")
 
-        stdio_transport = await self.exit_stack.enter_async_context(
-            stdio_client(server_params)
-        )
+        if server_url:
+            # Connect to an already-running HTTP server.
+            self.session = await self.exit_stack.enter_async_context(
+                Client(server_url)
+            )
 
-        read_stream, write_stream = stdio_transport
+            print(f"Connected to GitHub MCP server over HTTP: {server_url}")
 
-        self.session = await self.exit_stack.enter_async_context(
-            ClientSession(read_stream, write_stream)
-        )
+        else:
+            # Preserve the existing stdio workflow.
+            server_params = StdioServerParameters(
+                command="python",
+                args=["-m", "app.server"],
+            )
 
-        await self.session.initialize()
+            stdio_transport = await self.exit_stack.enter_async_context(
+                stdio_client(server_params)
+            )
 
-        print("Connected to GitHub MCP server.")
+            read_stream, write_stream = stdio_transport
+
+            self.session = await self.exit_stack.enter_async_context(
+                ClientSession(read_stream, write_stream)
+            )
+
+            await self.session.initialize()
+
+            print("Connected to GitHub MCP server over stdio.")
 
     async def list_tools(self) -> list[dict[str, Any]]:
-        """
-        Retrieve the tools exposed by the MCP server.
-        """
+        """Retrieve the tools exposed by the MCP server."""
 
         if self.session is None:
             raise RuntimeError("MCP client is not connected.")
 
         response = await self.session.list_tools()
 
-        tools = []
-
-        for tool in response.tools:
-            tools.append(
-                {
-                    "name": tool.name,
-                    "description": tool.description or "",
-                    "input_schema": tool.input_schema,
-                }
-            )
-
-        return tools
+        return [
+            {
+                "name": tool.name,
+                "description": tool.description or "",
+                "input_schema": tool.input_schema,
+            }
+            for tool in response.tools
+        ]
 
     async def call_tool(
         self,
         tool_name: str,
         arguments: dict[str, Any],
     ) -> Any:
-        """
-        Invoke a tool exposed by the MCP server.
-        """
+        """Invoke a tool exposed by the MCP server."""
 
         if self.session is None:
             raise RuntimeError("MCP client is not connected.")
 
-        result = await self.session.call_tool(
-            tool_name,
-            arguments,
-        )
-
-        return result
+        return await self.session.call_tool(tool_name, arguments)
 
     async def close(self):
-        """
-        Close the MCP connection and subprocess.
-        """
+        """Close the MCP connection and its managed resources."""
 
         await self.exit_stack.aclose()

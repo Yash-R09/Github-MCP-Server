@@ -1,3 +1,6 @@
+import os
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 from mcp.server import MCPServer
 
 try:
@@ -13,6 +16,9 @@ mcp = MCPServer("GitHub MCP Server")
 
 github = GitHubClient()
 
+@mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
+async def health_check(request: Request) -> JSONResponse:
+    return JSONResponse({"status": "ok"})
 
 # ============================================================
 # Repository Tools
@@ -453,4 +459,15 @@ def add_labels_to_issue(
 # ============================================================
 
 if __name__ == "__main__":
-    mcp.run()
+    transport = os.getenv("MCP_TRANSPORT", "stdio")
+
+    if transport == "stdio":
+        mcp.run()
+    else:
+        mcp.run(
+            transport="streamable-http",
+            host=os.getenv("MCP_HOST", "0.0.0.0"),
+            port=int(os.getenv("MCP_PORT", "8000")),
+            stateless_http=True,
+            json_response=True,
+        )
