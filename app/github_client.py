@@ -1,9 +1,11 @@
+import time
 import base64
 import os
 from typing import Any
 
 import httpx
 from dotenv import load_dotenv
+import logging
 
 
 # ============================================================
@@ -11,6 +13,7 @@ from dotenv import load_dotenv
 # ============================================================
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -36,6 +39,15 @@ class GitHubClient:
                 "Set it in your .env file."
             )
 
+        timeout_seconds = float(
+            os.getenv("GITHUB_API_TIMEOUT", "30")
+        )
+
+        if timeout_seconds <= 0:
+            raise ValueError(
+                "GITHUB_API_TIMEOUT must be greater than zero."
+            )
+
         self.client = httpx.Client(
             base_url=self.BASE_URL,
             headers={
@@ -43,7 +55,7 @@ class GitHubClient:
                 "Authorization": f"Bearer {token}",
                 "X-GitHub-Api-Version": "2026-03-10",
             },
-            timeout=30.0,
+            timeout=httpx.Timeout(timeout_seconds),
         )
 
     # ========================================================
@@ -57,24 +69,73 @@ class GitHubClient:
         **kwargs: Any,
     ) -> Any:
         """
-        Send an HTTP request and convert GitHub errors into
-        useful application-level errors.
+        Send an HTTP request with limited retries for transient
+        failures on safe HTTP methods.
         """
 
-        try:
-            response = self.client.request(
-                method,
-                endpoint,
-                **kwargs,
-            )
-        except httpx.TimeoutException:
-            raise RuntimeError(
-                "GitHub API request timed out."
-            )
-        except httpx.RequestError as exc:
-            raise RuntimeError(
-                f"GitHub API connection failed: {exc}"
-            )
+        method = method.upper()
+        safe_to_retry = method in {"GET", "HEAD"}
+        max_attempts = 3 if safe_to_retry else 1
+        response = None
+
+        for attempt in range(max_attempts):
+            try:
+                response = self.client.request(
+                    method,
+                    endpoint,
+                    **kwargs,
+                )
+            except httpx.TimeoutException:
+                if attempt + 1 < max_attempts:
+                    logger.warning(
+                        "GitHub API request timed out; retrying "
+                        "(method=%s, attempt=%s/%s)",
+                        method,
+                        attempt + 1,
+                        max_attempts,
+                    )
+                    time.sleep(2 ** attempt)
+                    continue
+
+                raise RuntimeError(
+                    "GitHub API request timed out."
+                ) from None
+            except httpx.RequestError as exc:
+                if attempt + 1 < max_attempts:
+                    logger.warning(
+                        "GitHub API connection failed; retrying "
+                        "(method=%s, attempt=%s/%s, error_type=%s)",
+                        method,
+                        attempt + 1,
+                        max_attempts,
+                        type(exc).__name__,
+                    )
+                    time.sleep(2 ** attempt)
+                    continue
+
+                raise RuntimeError(
+                    f"GitHub API connection failed: {exc}"
+                ) from exc
+            if (
+                safe_to_retry
+                and response.status_code in {500, 502, 503, 504}
+                and attempt + 1 < max_attempts
+            ):
+                logger.warning(
+                    "GitHub API returned a temporary server error; retrying "
+                    "(method=%s, status=%s, attempt=%s/%s)",
+                    method,
+                    response.status_code,
+                    attempt + 1,
+                    max_attempts,
+                )
+                time.sleep(2 ** attempt)
+                continue
+
+            break
+
+        if response is None:
+            raise RuntimeError("GitHub API request failed.")
 
         if response.is_success:
             if not response.content:
@@ -82,7 +143,7 @@ class GitHubClient:
 
             return response.json()
 
-        # Try to extract GitHub's error message.
+        # Extract GitHub's error message when available.
         try:
             data = response.json()
             message = data.get(
@@ -134,6 +195,7 @@ class GitHubClient:
         raise RuntimeError(
             f"GitHub API error ({status}): {message}"
         )
+
 
     @staticmethod
     def _validate_limit(limit: int) -> None:

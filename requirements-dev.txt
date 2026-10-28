@@ -1,2 +1,3 @@
 -r requirements.txt
 groq==1.6.0
+pytest==9.1.1

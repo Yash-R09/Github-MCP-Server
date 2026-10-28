@@ -1,3 +1,4 @@
+import logging
 import os
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -7,6 +8,15 @@ try:
     from app.github_client import GitHubClient
 except ModuleNotFoundError:
     from github_client import GitHubClient
+
+# ============================================================
+# Logging
+# ============================================================
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s - %(message)s",
+)
 
 # ============================================================
 # MCP Server
