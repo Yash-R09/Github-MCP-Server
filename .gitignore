@@ -11,3 +11,8 @@ __pycache__/
 .idea/
 
 *.log
+
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
