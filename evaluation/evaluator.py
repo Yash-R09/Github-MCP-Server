@@ -16,7 +16,7 @@ load_dotenv()
 
 PREDICTIONS_FILE = Path(__file__).parent / "predictions.json"
 
-MODEL = "openai/gpt-oss-20b"
+MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
 
 DEFAULT_MIN_ACCURACY = 90.0
 

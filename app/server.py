@@ -24,6 +24,19 @@ logging.basicConfig(
 
 mcp = MCPServer("GitHub MCP Server")
 
+READ_ONLY = os.getenv("GITHUB_MCP_READ_ONLY", "false").lower() in ("1", "true", "yes")
+
+def write_tool():
+    """Register a tool only when read-only mode is off."""
+    def decorator(func):
+        if READ_ONLY:
+            logging.getLogger(__name__).info(
+                "Read-only mode: write tool '%s' not registered", func.__name__
+            )
+            return func          # defined, but never exposed over MCP
+        return mcp.tool()(func)  # normal registration
+    return decorator
+
 github = GitHubClient()
 
 @mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
@@ -112,7 +125,7 @@ def list_directory(
     )
 
 
-@mcp.tool()
+@write_tool()
 def create_or_update_file(
     owner: str,
     repo: str,
@@ -182,7 +195,7 @@ def get_issue(
     )
 
 
-@mcp.tool()
+@write_tool()
 def create_issue(
     owner: str,
     repo: str,
@@ -245,7 +258,7 @@ def get_pull_request(
     )
 
 
-@mcp.tool()
+@write_tool()
 def create_pull_request(
     owner: str,
     repo: str,
@@ -311,7 +324,7 @@ def get_branch(
     )
 
 
-@mcp.tool()
+@write_tool()
 def create_branch(
     owner: str,
     repo: str,
@@ -445,7 +458,7 @@ def list_labels(
     )
 
 
-@mcp.tool()
+@write_tool()
 def add_labels_to_issue(
     owner: str,
     repo: str,
