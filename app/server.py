@@ -1,5 +1,8 @@
 import logging
 import os
+import time
+import json
+from functools import wraps
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from mcp.server import MCPServer
@@ -18,23 +21,61 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s - %(message)s",
 )
 
+tool_logger = logging.getLogger("tool_calls")
+
+
+def log_tool_call(func):
+    """Log tool execution status and duration without logging arguments."""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start = time.perf_counter()
+        status = "ok"
+        error_type = None
+
+        try:
+            return func(*args, **kwargs)
+        except Exception as exc:
+            status = "error"
+            error_type = type(exc).__name__
+            raise
+        finally:
+            event = {
+                "event": "tool_call",
+                "tool": func.__name__,
+                "status": status,
+                "duration_ms": round(
+                    (time.perf_counter() - start) * 1000, 2
+                ),
+            }
+
+            if error_type:
+                event["error_type"] = error_type
+
+            print(json.dumps(event), flush=True)
+    return wrapper
 # ============================================================
 # MCP Server
 # ============================================================
 
 mcp = MCPServer("GitHub MCP Server")
 
+def register_tool(func):
+    return mcp.tool()(log_tool_call(func))
+
 READ_ONLY = os.getenv("GITHUB_MCP_READ_ONLY", "false").lower() in ("1", "true", "yes")
 
 def write_tool():
-    """Register a tool only when read-only mode is off."""
+    """Register a write tool only when read-only mode is off."""
     def decorator(func):
         if READ_ONLY:
             logging.getLogger(__name__).info(
-                "Read-only mode: write tool '%s' not registered", func.__name__
+                "Read-only mode: write tool '%s' not registered",
+                func.__name__,
             )
-            return func          # defined, but never exposed over MCP
-        return mcp.tool()(func)  # normal registration
+            return func
+
+        return register_tool(func)
+
     return decorator
 
 github = GitHubClient()
@@ -47,7 +88,7 @@ async def health_check(request: Request) -> JSONResponse:
 # Repository Tools
 # ============================================================
 
-@mcp.tool()
+@register_tool
 def get_repository(
     owner: str,
     repo: str,
@@ -63,7 +104,7 @@ def get_repository(
     return github.get_repository(owner, repo)
 
 
-@mcp.tool()
+@register_tool
 def search_repositories(
     query: str,
     language: str | None = None,
@@ -86,7 +127,7 @@ def search_repositories(
 # File Tools
 # ============================================================
 
-@mcp.tool()
+@register_tool
 def get_file_contents(
     owner: str,
     repo: str,
@@ -106,7 +147,7 @@ def get_file_contents(
     )
 
 
-@mcp.tool()
+@register_tool
 def list_directory(
     owner: str,
     repo: str,
@@ -157,7 +198,7 @@ def create_or_update_file(
 # Issue Tools
 # ============================================================
 
-@mcp.tool()
+@register_tool
 def list_issues(
     owner: str,
     repo: str,
@@ -178,7 +219,7 @@ def list_issues(
     )
 
 
-@mcp.tool()
+@register_tool
 def get_issue(
     owner: str,
     repo: str,
@@ -222,7 +263,7 @@ def create_issue(
 # Pull Request Tools
 # ============================================================
 
-@mcp.tool()
+@register_tool
 def list_pull_requests(
     owner: str,
     repo: str,
@@ -241,7 +282,7 @@ def list_pull_requests(
     )
 
 
-@mcp.tool()
+@register_tool
 def get_pull_request(
     owner: str,
     repo: str,
@@ -290,7 +331,7 @@ def create_pull_request(
 # Branch Tools
 # ============================================================
 
-@mcp.tool()
+@register_tool
 def list_branches(
     owner: str,
     repo: str,
@@ -307,7 +348,7 @@ def list_branches(
     )
 
 
-@mcp.tool()
+@register_tool
 def get_branch(
     owner: str,
     repo: str,
@@ -347,7 +388,7 @@ def create_branch(
 # Commit Tools
 # ============================================================
 
-@mcp.tool()
+@register_tool
 def list_commits(
     owner: str,
     repo: str,
@@ -368,7 +409,7 @@ def list_commits(
     )
 
 
-@mcp.tool()
+@register_tool
 def get_commit(
     owner: str,
     repo: str,
@@ -389,7 +430,7 @@ def get_commit(
 # Search Tools
 # ============================================================
 
-@mcp.tool()
+@register_tool
 def search_code(
     query: str,
     limit: int = 5,
@@ -407,7 +448,7 @@ def search_code(
     )
 
 
-@mcp.tool()
+@register_tool
 def search_issues(
     query: str,
     limit: int = 5,
@@ -422,7 +463,7 @@ def search_issues(
     )
 
 
-@mcp.tool()
+@register_tool
 def search_pull_requests(
     query: str,
     limit: int = 5,
@@ -441,7 +482,7 @@ def search_pull_requests(
 # Label Tools
 # ============================================================
 
-@mcp.tool()
+@register_tool
 def list_labels(
     owner: str,
     repo: str,
