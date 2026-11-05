@@ -1,6 +1,11 @@
 variable "allowed_cidr" {
   type        = string
-  description = "Your public IP in CIDR form, e.g. 203.0.113.5/32"
+  description = "Single trusted public IPv4 address in /32 CIDR form"
+
+  validation {
+    condition     = can(cidrnetmask(var.allowed_cidr)) && can(regex("/32$", var.allowed_cidr))
+    error_message = "allowed_cidr must be a valid single IPv4 /32 address."
+  }
 }
 
 variable "desired_count" {

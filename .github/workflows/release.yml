@@ -1,0 +1,76 @@
+name: Test, evaluate and release
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy to ECS after checks (requires production environment approval)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+  evaluation:
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements-dev.txt
+      - name: Live Groq quality gate (no GitHub tool execution)
+        run: python -m evaluation.evaluator
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_MODEL: openai/gpt-oss-20b
+          GITHUB_TOKEN: catalog-only-not-used-for-api-calls
+          GITHUB_MCP_READ_ONLY: 'false'
+          MCP_TRANSPORT: stdio
+          EVALUATION_MIN_ACCURACY: '90'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-evaluation
+          path: evaluation/results.json
+          if-no-files-found: warn
+  deploy:
+    needs: [tests, evaluation]
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy && github.ref == 'refs/heads/main'
+    environment: production
+    concurrency: production-deployment
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-southeast-2
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and publish checked revision
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          docker build -t "$REGISTRY/github-mcp-server:$GITHUB_SHA" -t "$REGISTRY/github-mcp-server:latest" .
+          docker push "$REGISTRY/github-mcp-server:$GITHUB_SHA"
+          docker push "$REGISTRY/github-mcp-server:latest"
+      - name: Roll service using existing latest task definition
+        run: |
+          aws ecs update-service --cluster github-mcp-server-cluster --service github-mcp-server --force-new-deployment --query 'service.serviceName' --output text
+          aws ecs wait services-stable --cluster github-mcp-server-cluster --services github-mcp-server

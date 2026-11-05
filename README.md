@@ -1,562 +1,114 @@
-# GitHub MCP Server
+# GitHub MCP Server — AI DevOps demonstration
 
-An AI-powered GitHub integration built from scratch using the Model Context Protocol (MCP).
+A Python Model Context Protocol server exposing 21 GitHub tools, with a Groq-powered CLI assistant and an AWS ECS Fargate deployment defined in Terraform. Built to demonstrate how an AI application can combine controlled tool access, container delivery, infrastructure as code, observability and an AI quality release gate.
 
-This project exposes GitHub operations as structured MCP tools that an AI assistant can discover and invoke based on natural-language requests. It integrates the GitHub REST API with an MCP server and a Groq-powered AI assistant, while requiring explicit confirmation before executing write operations.
-
----
-
-## Overview
-
-Large language models can reason about information available to them, but they cannot directly access private systems such as authenticated GitHub accounts.
-
-This project demonstrates how MCP can act as a secure interface between an AI assistant and GitHub.
-
-For example, instead of manually interacting with GitHub, a user can ask:
-
-> "What is the default branch of microsoft/vscode?"
-
-or:
-
-> "Show me the open issues in microsoft/vscode."
-
-The AI assistant determines which MCP tool is appropriate, invokes the tool through the MCP protocol, and the server communicates with GitHub's REST API.
-
-For write operations, the assistant asks for explicit user confirmation before modifying GitHub data.
-
----
-
-## Architecture
-
-```text
-                         User
-                           |
-                           v
-                 +-------------------+
-                 |   AI Assistant    |
-                 |    Groq LLM       |
-                 +---------+---------+
-                           |
-                           | MCP
-                           v
-                 +-------------------+
-                 |  GitHub MCP       |
-                 |     Server        |
-                 +---------+---------+
-                           |
-                 +---------+---------+
-                 |                   |
-                 v                   v
-          Read Operations       Write Operations
-                 |                   |
-                 |             Confirmation
-                 |                   |
-                 |                   v
-                 |             User Approval
-                 |                   |
-                 +---------+---------+
-                           |
-                           v
-                 +-------------------+
-                 |   GitHubClient    |
-                 |      HTTPX        |
-                 +---------+---------+
-                           |
-                           | HTTPS
-                           v
-                 +-------------------+
-                 |   GitHub REST API |
-                 +-------------------+
+```mermaid
+flowchart LR
+    Client[MCP client / Groq assistant] -->|stdio or Streamable HTTP /mcp| Server[GitHub MCP Server]
+    Server --> GitHub[GitHub REST API]
+    Tests[Unit and MCP integration tests] --> Eval[Live Groq tool selection: 50 cases]
+    Eval --> Gate{At least 90%, no errors}
+    Gate -->|Pass + manual release| Docker
+    Docker --> ECR --> ECS[ECS Fargate]
+    ECS --> Server
+    Secrets[Secrets Manager] -->|Execution role injects GitHub token| ECS
+    TF[Terraform] --> ECR
+    TF --> ECS
+    TF --> CW[CloudWatch logs, metrics, dashboard, alarms]
+    Server -->|Structured tool events| CW
+    CW --> SNS --> Email
 ```
 
-### Request Flow
+## Capabilities and stack
 
-1. User enters a natural-language request.
-2. Groq determines which GitHub MCP tool is appropriate.
-3. The AI assistant sends the tool request through MCP.
-4. The MCP server validates the tool arguments.
-5. For read operations, the request executes immediately.
-6. For write operations, the assistant requests user confirmation.
-7. GitHubClient communicates with the GitHub REST API using HTTPX.
-8. The result is returned through MCP to the AI assistant.
-9. The assistant presents the result to the user.
+Python 3.12, MCP SDK 2.0.0, HTTPX, python-dotenv, Groq SDK, pytest, Docker, Terraform and AWS (ECR, ECS Fargate, IAM, Secrets Manager, CloudWatch, SNS). Runtime dependencies are in `requirements.txt`; assistant/evaluation/test dependencies are in `requirements-dev.txt`.
 
----
+Tools: `get_repository`, `search_repositories`, `get_file_contents`, `list_directory`, `list_issues`, `get_issue`, `create_issue`, `list_pull_requests`, `get_pull_request`, `create_pull_request`, `list_branches`, `get_branch`, `create_branch`, `list_commits`, `get_commit`, `search_code`, `search_issues`, `search_pull_requests`, `list_labels`, `add_labels_to_issue`, `create_or_update_file`.
 
-## Features
+Read-only mode omits the five write tools. The interactive assistant asks for write confirmation; direct MCP clients do not inherit that CLI confirmation. GitHub HTTP requests have bounded timeouts and read retry logic; writes are not blindly retried.
 
-### Repository Tools
-- `get_repository`
-- `search_repositories`
+## Local setup (PowerShell)
 
-Retrieve repository metadata and search GitHub repositories.
-
-### File Tools
-- `get_file_contents`
-- `list_directory`
-- `create_or_update_file`
-
-Read repository files and perform controlled file creation/update operations.
-
-### Issue Tools
-- `list_issues`
-- `get_issue`
-- `create_issue`
-
-Retrieve issues and create new GitHub issues.
-
-### Pull Request Tools
-- `list_pull_requests`
-- `get_pull_request`
-- `create_pull_request`
-
-Inspect pull requests and create new pull requests.
-
-### Branch Tools
-- `list_branches`
-- `get_branch`
-- `create_branch`
-
-Inspect branches and create new branches.
-
-### Commit Tools
-- `list_commits`
-- `get_commit`
-
-Retrieve branch commit history and individual commit information.
-
-### Search Tools
-- `search_code`
-- `search_issues`
-- `search_pull_requests`
-
-Search GitHub using GitHub's search capabilities.
-
-### Label Tools
-- `list_labels`
-- `add_labels_to_issue`
-
-Inspect available repository labels and attach existing labels to issues.
-
----
-
-## Tool Categories
-
-The tools are intentionally separated by GitHub functionality.
-
-| Category | Tools |
-|---|---|
-| Repository | `get_repository`, `search_repositories` |
-| Files | `get_file_contents`, `list_directory`, `create_or_update_file` |
-| Issues | `list_issues`, `get_issue`, `create_issue` |
-| Pull Requests | `list_pull_requests`, `get_pull_request`, `create_pull_request` |
-| Branches | `list_branches`, `get_branch`, `create_branch` |
-| Commits | `list_commits`, `get_commit` |
-| Search | `search_code`, `search_issues`, `search_pull_requests` |
-| Labels | `list_labels`, `add_labels_to_issue` |
-
-The tool descriptions are designed to give the LLM enough information to distinguish between similar operations.
-
----
-
-## Security and Confirmation
-
-The project follows a safety-first design for GitHub write operations.
-
-### Read Operations
-
-Read-only operations execute directly. Examples:
-
-- Get repository information
-- Read a file
-- List issues
-- Get an issue
-- List branches
-- Search code
-- Get commit information
-
-### Write Operations
-
-Operations that modify GitHub require explicit confirmation from the user. Examples:
-
-- Create or update a file
-- Create an issue
-- Create a pull request
-- Create a branch
-- Add labels to an issue
-
-Example:
-
-```text
-============================================================
-CONFIRMATION REQUIRED
-============================================================
-
-The assistant wants to execute:
-  Tool: create_issue
-
-Arguments:
-{
-  "owner": "Yash-R09",
-  "repo": "Book-Tracker",
-  "title": "AI Assistant Confirmation Test"
-}
-
-This operation will modify your GitHub account.
-
-Proceed? (yes/no):
-```
-
-The operation is executed only when the user explicitly approves it.
-
-This prevents the LLM from silently making destructive or unintended changes to a GitHub account.
-
----
-
-## Authentication
-
-The server uses a GitHub Personal Access Token for authenticated GitHub API access.
-
-Environment variables are used so credentials are not hardcoded into the source code.
-
-Example `.env`:
-
-```env
-GITHUB_TOKEN=your_github_token
-GROQ_API_KEY=your_groq_api_key
-```
-
-Never commit `.env` or API keys to GitHub.
-
-A `.env.example` file should be included in the repository:
-
-```env
-GITHUB_TOKEN=
-GROQ_API_KEY=
-```
-
----
-
-## Technology Stack
-
-- Python 3.12
-- Model Context Protocol (MCP) Python SDK
-- GitHub REST API
-- HTTPX
-- Groq API
-- Pydantic
-- Python asyncio
-- MCP Inspector
-
----
-
-## Project Structure
-
-```text
-github-mcp-server/
-│
-├── app/
-│   ├── __init__.py
-│   ├── github_client.py
-│   ├── server.py
-│   │
-│   └── tools/
-│       ├── ...
-│
-├── client/
-│   ├── __init__.py
-│   ├── mcp_client.py
-│   ├── assistant.py
-│   └── test_client.py
-│
-├── evaluation/
-│   ├── __init__.py
-│   ├── evaluator.py
-│   ├── test_cases.py
-│   └── predictions.json
-│
-├── .env.example
-├── .gitignore
-├── README.md
-└── requirements.txt
-```
-
----
-
-## Running the MCP Server
-
-Activate the virtual environment:
-
-**Windows PowerShell**
 ```powershell
+python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-```
-
-Run the MCP development server:
-
-```bash
-mcp dev app\server.py
-```
-
-The MCP Inspector can then be used to inspect the available tools and execute test calls.
-
----
-
-## Running the AI Assistant
-
-The project includes a Groq-powered AI assistant that connects to the GitHub MCP server.
-
-Run:
-
-```bash
+python -m pip install -r requirements-dev.txt
+Copy-Item .env.example .env
+# Populate .env privately; never commit it.
+python -m app.server
+# In another activated terminal:
 python -m client.assistant
 ```
 
-Example:
+`python -m app.server` defaults to stdio. For a local HTTP server:
 
-```text
-Connected to GitHub MCP server.
-
-============================================================
-GitHub MCP AI Assistant
-============================================================
-
-Type 'exit' to quit.
-
-You: What is the default branch of microsoft/vscode?
-
-Assistant: The default branch of the microsoft/vscode repository is "main".
+```powershell
+$env:MCP_TRANSPORT='streamable-http'
+$env:MCP_HOST='127.0.0.1'
+$env:MCP_PORT='8000'
+$env:GITHUB_MCP_READ_ONLY='true'
+python -m app.server
 ```
 
----
+HTTP exposes `/health` (process health, not a GitHub dependency probe) and `/mcp`. Use `MCP_SERVER_URL` to connect the client to HTTP; unset it to use a spawned local stdio server. The client uses its current Python interpreter.
 
-## MCP Tool Discovery
-
-The AI assistant dynamically discovers the tools exposed by the MCP server.
-
-Example tools discovered by the client:
-
-- `get_repository`
-- `search_repositories`
-- `get_file_contents`
-- `list_directory`
-- `create_or_update_file`
-- `list_issues`
-- `get_issue`
-- `create_issue`
-- `list_pull_requests`
-- `get_pull_request`
-- `create_pull_request`
-- `list_branches`
-- `get_branch`
-- `create_branch`
-- `list_commits`
-- `get_commit`
-- `search_code`
-- `search_issues`
-- `search_pull_requests`
-- `list_labels`
-- `add_labels_to_issue`
-
-This demonstrates an important MCP concept: the AI client does not need GitHub-specific logic hardcoded into it. The MCP server exposes capabilities as tools that the client can discover and invoke.
-
----
-
-## Evaluation
-
-The project includes a 50-question tool-selection evaluation.
-
-Each natural-language question has an expected MCP tool.
-
-The evaluation measures three outcomes:
-
-- **Correct Tool** — the AI selected the expected tool.
-- **Wrong Tool** — the AI selected a valid MCP tool, but it was not the expected tool.
-- **Tool Failed** — the AI failed to produce a valid tool selection.
-
-### Evaluation Results
-
-Baseline evaluation:
-
-```text
-============================================================
-GitHub MCP Server Tool Selection Evaluation
-============================================================
-
-Total test cases : 50
-Evaluated        : 50
-Correct          : 47
-Wrong Tool       : 3
-Tool Failed      : 0
-Accuracy         : 94.00%
-
-============================================================
-```
-
-**Summary**
-
-| Metric | Result |
+| Variable | Purpose / default |
 |---|---|
-| Total Questions | 50 |
-| Correct Tool | 47 |
-| Wrong Tool | 3 |
-| Tool Failed | 0 |
-| Accuracy | 94% |
+| `GITHUB_TOKEN` | Required server credential; minimum repository permissions for intended tools |
+| `GROQ_API_KEY` | Required for assistant and live evaluation |
+| `GROQ_MODEL` | `openai/gpt-oss-20b` |
+| `MCP_SERVER_URL` | Optional remote HTTP MCP endpoint |
+| `MCP_TRANSPORT` | `stdio`; Docker uses `streamable-http` |
+| `MCP_HOST`, `MCP_PORT` | HTTP binding; Docker uses `0.0.0.0:8000` |
+| `GITHUB_MCP_READ_ONLY` | Disable write-tool registration; Docker/Terraform use `true` |
+| `GITHUB_API_TIMEOUT` | Positive GitHub HTTP timeout in seconds; default 30 |
+| `LOG_LEVEL` | Default `INFO` |
+| `EVALUATION_MIN_ACCURACY` | Default 90; only 90–100 accepted |
 
-The evaluation demonstrates that the AI assistant successfully selected the correct MCP tool for the majority of natural-language GitHub requests.
+## Evaluation and quality gate
 
-The three wrong-tool cases involved semantic overlap between tools, such as:
-
-- Branch information vs. commit information
-- Issue search vs. issue listing
-- Issue labels vs. file operations
-
-These cases demonstrate why precise MCP tool descriptions are important for reliable tool selection.
-
-### Example Evaluation Cases
-
-**Question:**
-"What is the default branch of microsoft/vscode?"
-
-- Expected: `get_repository`
-- Predicted: `get_repository`
-- Status: **CORRECT**
-
-**Another example:**
-
-**Question:**
-"What commit does the develop branch point to?"
-
-- Expected: `get_branch`
-- Predicted: `get_commit`
-- Status: **WRONG_TOOL**
-
-This illustrates that tool-selection accuracy depends not only on the model, but also on how clearly tool capabilities are represented.
-
-### Running the Evaluation
-
-Run:
-
-```bash
+```powershell
+python -m pytest -q -p no:cacheprovider
+Remove-Item Env:MCP_SERVER_URL -ErrorAction SilentlyContinue
+$env:GITHUB_MCP_READ_ONLY='false'
+$env:MCP_TRANSPORT='stdio'
 python -m evaluation.evaluator
 ```
 
-The evaluator loads the 50 test cases from `evaluation/test_cases.py` and stores the model predictions in `evaluation/predictions.json`.
+Evaluation measures **single tool-name selection**, using all 50 unchanged prompts in `evaluation/test_cases.py` and the actual MCP tool descriptions. It does not execute tools, validate arguments, measure answer correctness or evaluate the assistant's full tool-use loop. Use a local full catalog, since the cases include write tools that are absent from the deployed read-only server. A placeholder GitHub token suffices for catalog discovery; no GitHub API calls are made by evaluation.
 
----
+The evaluator checks the selected model against the authenticated Groq model list. It requests strict JSON-schema output with temperature 0, seed 42, low reasoning effort and a 4096-token completion budget, validates the exact response shape and tool membership, and uses SDK timeouts and two retries for transient failures/rate limits. Deterministic settings reduce variation but cannot guarantee identical model output. The default model is listed in [Groq's supported models](https://console.groq.com/docs/models); account availability is checked at runtime. Strict structured output support is required for any model override; see [Groq structured outputs](https://console.groq.com/docs/structured-outputs).
 
-## MCP Concepts Demonstrated
+`evaluation/results.json` is a fresh ignored live report containing model, time, settings, dataset/catalog hashes, per-case outcomes and totals. Exceptions are recorded by class only. A result passes only with at least 90% correct and **zero** API/parsing errors. Missing credentials, invalid catalogs, crashes and incomplete startup exit nonzero; stale success reports are removed first. `evaluation/predictions.json` is a legacy unprovenanced artifact and is never used to authorize release.
 
-This project demonstrates several important MCP concepts.
+Pytest collects safe tests from `tests/`; the existing manual remote/demo scripts are intentionally not automatic tests. Fixture tests cover 50/50 success, 45/50 success, 44/50 failure, and 49/50 correct plus one API error failing. These are evaluator logic tests, not live model scores. Local MCP integration verifies discovery of all 21 tools without calling GitHub.
 
-- **MCP Server** — The server exposes GitHub functionality as structured tools.
-- **MCP Client** — The AI assistant connects to the MCP server and discovers available tools dynamically.
-- **Tool Schema** — Each tool exposes structured parameters that the model can use to construct tool calls.
-- **Tool Selection** — The LLM decides which tool best matches a user's natural-language request.
-- **API Abstraction** — GitHub API communication is isolated inside `GitHubClient`, keeping API logic separate from MCP tool definitions.
-- **Authentication** — GitHub authentication is handled using environment-based credentials.
-- **Confirmation** — Write operations require explicit user approval before execution.
-- **Error Handling** — GitHub API failures and invalid operations are handled and surfaced to the client.
+`.github/workflows/release.yml` runs local tests before live evaluation on PRs, main pushes and manual dispatch. The deployment job requires both jobs to succeed, a manual dispatch with `deploy=true`, and the main branch. Fork PRs without Groq secrets fail closed. No fixture fallback permits release. Configure the repository secret `GROQ_API_KEY`, repository variable `AWS_DEPLOY_ROLE_ARN`, an AWS OIDC trust restricted to the repository's production environment, and **required reviewers on the GitHub `production` environment** before use. Branch protection should require the tests/evaluation checks. These repository settings have not been configured by this local change.
 
----
+## Docker and AWS deployment
 
-## Design Principles
+```powershell
+docker build -t github-mcp-server:local .
+docker run --rm --env-file .env -p 127.0.0.1:8000:8000 github-mcp-server:local
+terraform -chdir=infra fmt -check
+terraform -chdir=infra validate
+terraform -chdir=infra plan -input=false
+```
 
-The project follows these principles:
+Docker runs as a non-root user. Terraform defines the default VPC/subnet deployment, public task networking, TCP 8000 restricted to `allowed_cidr`, ECR, ECS service, task/execution roles, secret container and monitoring. Set private ignored `infra/terraform.tfvars` values for `allowed_cidr` (a trusted IPv4 `/32`) and `alert_email`. Region defaults to `ap-southeast-2`. Never put secret values in Terraform variables/state: the execution role reads the existing secret into the task; the application task role has no AWS permissions.
 
-1. **Separation of concerns**
+Review and explicitly approve infrastructure changes before applying. Terraform state is local and ignored; encrypted remote state and locking remain future work. Existing destructive settings include ECR `force_delete` and zero-day secret recovery; use caution with teardown.
 
-   ```text
-   AI Assistant
-         |
-         v
-   MCP Client
-         |
-         v
-   MCP Server
-         |
-         v
-   GitHubClient
-         |
-         v
-   GitHub API
-   ```
+The release workflow builds the checked revision, pushes SHA and `latest` image tags, forces a new deployment of the existing `latest` task definition, then waits for ECS stability. Cluster: `github-mcp-server-cluster`; service: `github-mcp-server`. It requires an existing provisioned service and least-privilege deployment role. Deployment has not been run in this work. The mutable `latest` tag is retained to match Terraform; immutable task-definition image digests and automated rollback are future improvements. The task public IP can change on replacement; discover the current task network interface before a remote demo.
 
-   Each layer has a specific responsibility.
+## Monitoring and security review
 
-2. **Least privilege** — The server exposes only the GitHub operations required by the application.
+Tool calls emit JSON with tool name, status, duration and exception class, without arguments. `/ecs/github-mcp-server` retains logs for seven days. Metric filters publish `GitHubMCP/ToolCallErrors` and `ToolCallLatency`. The error alarm sums failures over five minutes and triggers at three; latency alarms on an average above 5000 ms over five minutes. Missing data is nonbreaching. The dashboard shows errors and latency, and alarm actions publish to SNS email (subscription confirmation required).
 
-3. **Explicit confirmation** — The AI cannot silently modify GitHub data.
+See [infrastructure review](docs/INFRA_REVIEW.md) for state evidence and the proposed narrowly scoped ingress correction. HTTP has no application authentication or TLS in the current deployment; network restriction and GitHub read-only mode are essential demo controls. Do not expose it broadly. Fargate, ECR, logs, dashboards, secrets and model requests can incur costs.
 
-4. **Structured interfaces** — Tools use structured inputs and outputs rather than relying on unstructured text.
+## Verification
 
-5. **Testability** — The tool-selection layer is evaluated independently using 50 natural-language test cases.
+Historical verification **reported by the project owner**, not repeated during this work: remote MCP repository invocation at 437.02 ms; error metrics recorded; three deliberate failed tool calls triggered the threshold-three alarm and an SNS email was received. This verifies the reported pipeline MCP → ECS → CloudWatch → SNS → email, not a current availability guarantee.
 
----
-
-## Why MCP?
-
-Traditional LLM applications often hardcode API integrations directly into the application.
-
-MCP provides a standardized interface between AI applications and external tools.
-
-Instead of building GitHub-specific integration logic directly into every AI assistant, an MCP server exposes GitHub capabilities through standardized tools. This allows MCP-compatible AI clients to discover and use those capabilities.
-
----
-
-## Example Use Cases
-
-The assistant can handle requests such as:
-
-- "What is the default branch of microsoft/vscode?"
-- "Read README.md from microsoft/vscode."
-- "Show me the open issues in microsoft/vscode."
-- "List branches in my repository."
-- "Show the latest commits on main."
-- "Search GitHub code for FastMCP."
-- "Find issues mentioning authentication."
-- "Create a new branch called feature-auth from main."
-
-For modifying operations, the assistant asks for confirmation before execution.
-
----
-
-## Learning Outcomes
-
-This project provides practical experience with:
-
-- Model Context Protocol
-- MCP server and client architecture
-- LLM tool selection
-- Tool schema design
-- GitHub REST API integration
-- HTTPX
-- API authentication
-- Structured tool inputs and outputs
-- LLM error handling
-- Confirmation workflows
-- Evaluation of tool selection
-- AI infrastructure design
-
----
-
-## Future Improvements
-
-Potential improvements include:
-
-- OAuth-based GitHub authentication
-- More GitHub API operations
-- Better pagination support
-- Retry and backoff handling
-- Rate-limit awareness
-- More comprehensive evaluation datasets
-- Improved tool-selection accuracy
-- Audit logging
-- Fine-grained permission scopes
-- Support for additional MCP-compatible clients
-
----
-
-## Author
-
-Built as an AI Engineering portfolio project to explore Model Context Protocol, LLM tool use, API integration, and AI infrastructure.
+Current local checks: 26 tests passed; the latest full live Groq evaluation passed with 49/50 correct (98%), one wrong-tool answer and zero API errors. Earlier runs failed safely on provider errors. This is local live verification; the GitHub-hosted workflow and deployment have not been run. Detailed verification and live evaluation results are recorded in [verification report](docs/VERIFICATION.md). No AWS mutation or deployment was performed during local verification. See [interview preparation](docs/INTERVIEW_PREP.md) for an honest project explanation and questions.

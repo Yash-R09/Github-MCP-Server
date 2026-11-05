@@ -1,5 +1,6 @@
 
 import os
+import sys
 from contextlib import AsyncExitStack
 from typing import Any
 
@@ -35,7 +36,7 @@ class GitHubMCPClient:
         else:
             # Preserve the existing stdio workflow.
             server_params = StdioServerParameters(
-                command="python",
+                command=sys.executable,
                 args=["-m", "app.server"],
             )
 
