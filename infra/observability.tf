@@ -20,13 +20,13 @@ resource "aws_cloudwatch_log_metric_filter" "tool_call_latency" {
   name           = "${var.project}-tool-call-latency"
   log_group_name = aws_cloudwatch_log_group.app.name
 
-  pattern = "{ $.event = \"tool_call\" }"
+  pattern = "{ $.event = tool_call }"
 
   metric_transformation {
     name          = "ToolCallLatency"
     namespace     = "GitHubMCP"
     value         = "$.duration_ms"
-    default_value = 0
+    default_value = "" # Preserve the live filter: no default sample.
   }
 }
 

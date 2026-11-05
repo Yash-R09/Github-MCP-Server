@@ -57,7 +57,7 @@ The owner reports that three deliberately failed remote calls caused ALARM and a
 
 The unchanged dataset contains 50 prompts with expected tool names. The evaluator obtains the actual MCP catalog and asks Groq for one JSON selection per prompt. It checks account model availability, exact JSON shape and tool membership. Strict schema output constrains the response to available tool names; it does not supply the expected answer. A fixed seed, temperature zero, low reasoning effort and a bounded completion budget improve consistency, but model behavior can change.
 
-Correct cases divided by all 50 gives the pass rate. At least 45 correct are required, and any API/parsing error independently blocks release. Reports include settings, time, hashes and per-case outcomes. This evaluates routing only, not arguments, permissions, execution results or the full assistant loop. Fixture tests validate logic without claiming model quality. The latest full live run achieved 49/50 correct (98%), one wrong selection and zero API errors, passing the local release gate. Earlier provider-error runs correctly failed. This does not claim a successful GitHub-hosted workflow or AWS deployment. Use docs/VERIFICATION.md for measured results.
+Correct cases divided by all 50 gives the pass rate. At least 45 correct are required, and any API/parsing error independently blocks release. Reports include settings, time, hashes and per-case outcomes. This evaluates routing only, not arguments, permissions, execution results or the full assistant loop. Fixture tests validate logic without claiming model quality. The latest full live run achieved 49/50 correct (98%), one wrong selection and zero API errors, passing the local release gate. Earlier provider-error runs correctly failed. GitHub-hosted tests and live evaluation also passed at commit 453293a, attempt 2, with 98% and zero API errors. Deployment was skipped; no AWS release is claimed. Use docs/VERIFICATION.md for measured results.
 
 ## How the 90% gate blocks deployment
 
@@ -70,7 +70,7 @@ The workflow deploy job depends on tests and live evaluation. A nonzero evaluato
 - Live JSON-generation errors motivated strict structured outputs and a larger completion budget with low reasoning effort. Report actual full-run results, not just a successful diagnostic case.
 - Malformed responses now fail strict parser tests rather than causing accidental passes.
 - Deployed read-only mode omits write tools, so full evaluation uses local discovery without executing tools.
-- A reported manual security-group rule is absent from saved state. Live credentials and a refreshed plan are required before correction.
+- Read-only AWS review confirmed the manual security-group rule and both old client IPs. After explicit owner approval, Terraform applied one in-place security-group update to the current workstation /32. Live rules were verified and the post-apply plan was clean.
 - The MCP subprocess now uses the active Python interpreter rather than an arbitrary python on PATH.
 
 ## Ten likely interview questions
@@ -88,4 +88,4 @@ The workflow deploy job depends on tests and live evaluation. A nonzero evaluato
 
 ## Known limitations and improvements
 
-The demo has no application authentication or TLS, and its public task IP can change. A narrowly scoped security group and read-only server are essential. CLI confirmation does not secure direct MCP calls. Current AWS credentials were unavailable for drift verification. Model quality is nondeterministic and must be reported from the current run. CI secrets, OIDC trust and environment reviewers require repository setup. Mutable image tags and dependency ranges limit reproducibility. AWS and model requests can incur costs. Do not claim a deployed quality gate until the workflow has actually run in GitHub.
+The demo has no application authentication or TLS, and its public task IP can change. A narrowly scoped security group and read-only server are essential. CLI confirmation does not secure direct MCP calls. AWS drift was verified read-only outside the sandbox; the approved ingress correction was applied and verified with a clean post-apply plan. Model quality is nondeterministic and must be reported from the current run. CI secrets, OIDC trust and environment reviewers require repository setup. Mutable image tags and dependency ranges limit reproducibility. AWS and model requests can incur costs. The quality gate has now passed in GitHub Actions; do not confuse that with an AWS deployment, which remains unverified.
