@@ -38,6 +38,12 @@ class GitHubMCPClient:
             server_params = StdioServerParameters(
                 command=sys.executable,
                 args=["-m", "app.server"],
+                # MCP inherits only basic OS variables. Forward server settings
+                # explicitly; do not send Groq or AWS credentials to the child.
+                env={name: os.environ[name] for name in (
+                    "GITHUB_TOKEN", "GITHUB_API_TIMEOUT", "GITHUB_MCP_READ_ONLY",
+                    "LOG_LEVEL", "PYTHON_DOTENV_DISABLED",
+                ) if name in os.environ} | {"MCP_TRANSPORT": "stdio"},
             )
 
             stdio_transport = await self.exit_stack.enter_async_context(

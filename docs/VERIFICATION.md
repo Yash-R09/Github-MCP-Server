@@ -2,7 +2,7 @@
 
 ## Current local checks
 
-- 26 pytest tests passed, including the existing GitHub retry tests, evaluator fixture/boundary/error/CLI tests and a real local stdio MCP catalog integration test for all 21 tools.
+- 27 pytest tests passed, including the existing GitHub retry tests, evaluator fixture/boundary/error/CLI tests and real local stdio MCP catalog tests for all 21 tools and the 16-tool read-only catalog, with dotenv loading disabled.
 - Fixture demonstrations: 50/50 passes; 45/50 passes; 44/50 fails; 49 correct plus one API error fails. These are deterministic logic tests, not model quality scores.
 - Python compileall passed for app, client, evaluation and tests.
 - pip check: no broken requirements found.
@@ -36,7 +36,7 @@ The owner's local test run hit PermissionError in pytest's shared Windows temp f
 
 ## CI/CD status
 
-A new single GitHub Actions workflow runs tests, then live evaluation, then an explicitly requested main-branch deployment only on success. No existing workflow was present to extend. Missing credentials and evaluator crashes fail closed. The workflow has not run in GitHub, and deployment was not tested. Configure GROQ_API_KEY, AWS_DEPLOY_ROLE_ARN, repository-restricted AWS OIDC trust, production required reviewers and branch protection before use. YAML job dependencies and deterministic gate exit codes were reviewed/tested locally; no hosted workflow result is claimed.
+A new single GitHub Actions workflow runs tests, then live evaluation, then an explicitly requested main-branch deployment only on success. No existing workflow was present to extend. Missing credentials and evaluator crashes fail closed. The [first hosted run](https://github.com/Yash-R09/Github-MCP-Server/actions/runs/42035693761) at commit bcaa869 failed with 25 tests passed and one failed: the server subprocess did not receive GITHUB_TOKEN. The MCP SDK inherits only basic OS variables; the local .env masked this dependency. The client now forwards only required server settings and forces stdio transport, without forwarding Groq/AWS credentials. The regression tests disable dotenv and verify both catalog modes. This correction passes all 27 local tests and awaits push and hosted verification. Evaluation and deployment jobs were skipped in the failed hosted run; no deployment occurred. Configure GROQ_API_KEY, AWS_DEPLOY_ROLE_ARN, repository-restricted AWS OIDC trust, production required reviewers and branch protection before use. The local GitHub token can read job logs but receives HTTP 403 when listing Actions secrets and variables, so GROQ_API_KEY and AWS_DEPLOY_ROLE_ARN configuration remain unverified. Production environment lookup returned HTTP 404; its existence/protection cannot be confirmed with this access. AWS STS reports missing credentials and no named CLI profiles are available. No repository settings or AWS resources were mutated.
 
 ## Terraform and AWS status
 
